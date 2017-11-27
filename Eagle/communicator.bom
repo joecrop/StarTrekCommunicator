@@ -1,0 +1,54 @@
+Partlist
+
+Exported from communicator.brd at 7/31/16 2:42 PM
+
+EAGLE Version 7.6.0 Copyright (c) 1988-2016 CadSoft
+
+Assembly variant: 
+
+Part     Value                   Package               Library                     Position (mm)         Orientation
+
+3X3MM1   CURRENT_BOOTLOADER3X3MM QFN50P300X300X100-17N Teensy_DIY_v1.0             (44.406796875 18.970015625) R270
+C1       4.7uF                   0603-CAP              SparkFun-Capacitors         (20.878490625 7.22660625) R0
+C2       10uF                    0603-CAP              SparkFun-Capacitors         (27.7280125 8.29785)  R90
+C3       4.7uF                   0603-CAP              SparkFun-Capacitors         (10.847225 21.563715625) R0
+C4       0.1uF                   0603-CAP              SparkFun-Capacitors         (37.9494625 11.5016875) R270
+C5       10uF                    0603-CAP              SparkFun-Capacitors         (40.42368125 12.10365625) R0
+C6       1uF                     0603-CAP              SparkFun-Capacitors         (38.4 29.94)          R90
+C7       0.1uF                   0603-CAP              SparkFun-Capacitors         (46.192996875 23.11360625) R90
+C8       4.7uF                   0603-CAP              SparkFun-Capacitors         (10.993428125 11.198559375) R180
+C9       4.7uF                   0603-CAP              SparkFun-Capacitors         (10.918546875 17.184615625) R180
+C10      0.1uF                   0603-CAP              SparkFun-Capacitors         (29.55433125 8.3029125) R90
+C11      10uF                    0603-CAP              SparkFun-Capacitors         (31.5018875 8.29781875) R90
+C12      0.1uF                   0603-CAP              SparkFun-Capacitors         (14.0264875 30.863490625) R0
+C13      10uF                    0603-CAP              SparkFun-Capacitors         (14.0198875 29.332384375) R0
+C14      0.1uF                   0603-CAP              SparkFun-Capacitors         (32.38 27.34)         R90
+C15      0.1uF                   0603-CAP              SparkFun-Capacitors         (31.99484375 31.07449375) R90
+C16      0.5pF                   0603-CAP              SparkFun-Capacitors         (25.775921875 30.97184375) R0
+C17      10uF                    0603-CAP              SparkFun-Capacitors         (32.4 24.2)           R270
+C18      1nF                     0603-CAP              SparkFun-Capacitors         (39.46 24.38)         R0
+C19      1nF                     0603-CAP              SparkFun-Capacitors         (40.9 29)             R0
+IC1      MCP73831/OT             SOT23-5L              adafruit                    (10.901584375 14.257403125) R0
+J2                               1X02                  SparkFun-Connectors         (14.84 10.14)         R0
+L1       2.2 uH                  INDC3225X22N          Bourns_By_element14_Batch_1 (25.0084875 9.24195)  R90
+L2       10nH                    0603                  SparkFun-Passives           (23.447034375 30.119040625) R90
+L3       4.7nH                   0603                  SparkFun-Passives           (25.7756 29.2748)     R0
+LED1                             CHIPLED_0805          adafruit                    (10.838403125 23.25484375) R90
+R1       0                       0603-RES              SparkFun-Resistors          (36.92 30.6)          R270
+R2       470                     0603-RES              SparkFun-Resistors          (6.29669375 25.935940625) R180
+R3       2.55k                   0603-RES              SparkFun-Resistors          (7.272284375 14.042371875) R0
+R4       150k                    0603-RES              SparkFun-Resistors          (39.36 26.3)          R180
+R5       33                      0603-RES              SparkFun-Resistors          (36.303009375 10.984078125) R90
+R6       33                      0603-RES              SparkFun-Resistors          (34.745503125 10.984084375) R90
+R7       150k                    0603-RES              SparkFun-Resistors          (39.34 27.7)          R180
+U$1      ANTENNA_915MHZ          ANTENNA_915MHZ        prototype                   (23.44 34.34)         R90
+U$2      MICROPHONE              SPU0414HR5H-SB        prototype                   (34.5 31.12)          R180
+U$3      SPEAKER                 PSR1511N08S3K         prototype                   (11.42 20.66)         MR180
+U$4      KXT131LHS               KXT131LHS             prototype                   (44.08 14)            R50
+U$5      LM3671                  SOT23-5               texas-custom                (21.027546875 9.864703125) R270
+U$6      MKL26Z64VFT4            QFN50P700X700X100-49N Teensy_DIY_v1.0             (37.294109375 17.301003125) R90
+U$8      MICRO_USB_B             MICRO_USB_B           prototype                   (4.64 20)             R270
+U$9      TSX-3225                TSX-3225              prototype                   (43.12 23.42)         R270
+U1       RFM69HCW                RFM69HCW-XXXS2        SparkFun-RF                 (22.179634375 19.8366375) R180
+U2       LIS331                  LGA16-3MM             SparkFun-Sensors            (10.271759375 27.249121875) R270
+U3       TPA2005D1DRB            QFN-8_PAD             SparkFun-AnalogIC           (35.54 24.72)         R90
