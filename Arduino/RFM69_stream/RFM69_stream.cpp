@@ -3,117 +3,204 @@
 #include <SPI.h>
 #include <RFM69_stream.h>
 
+//static uint8_t BYTELEN = 12; //12 bits = 4 bits overhead, 8 bit packet
+//static uint8_t BYTESEQ0 = 0;
+//static uint8_t BYTESEQ1 = 1;
+//static uint8_t BYTESEQ2 = 0;
+//static uint8_t BYTESEQ3 = 1;
+
+volatile uint8_t RFM69_stream::activeBuffer;
+volatile uint16_t RFM69_stream::bufferCounter;
+volatile uint16_t RFM69_stream::totalSamplesSent;
+volatile uint8_t RFM69_stream::DATALEN0;
+volatile uint8_t RFM69_stream::DATALEN1;
+volatile uint8_t RFM69_stream::STREAMDATA0[RF69_MAX_DATA_LEN];
+volatile uint8_t RFM69_stream::STREAMDATA1[RF69_MAX_DATA_LEN];
+volatile uint8_t RFM69_stream::CYPHER[RF69_MAX_DATA_LEN/2];
+
 // constructor
-RFM69_stream::RFM69_stream(uint8_t slaveSelectPin, uint8_t interruptPin, bool isRFM69HW, uint8_t interruptNum)
-	: RFM69(slaveSelectPin, interruptPin, isRFM69HW, interruptNum)
+   RFM69_stream::RFM69_stream(uint8_t slaveSelectPin, uint8_t interruptPin, bool isRFM69HW, uint8_t interruptNum)
+: RFM69(slaveSelectPin, interruptPin, isRFM69HW, interruptNum)
 {
+   streamInit();
 }
 
-void RFM69_stream::streamingMode()
+void RFM69_stream::dataRate100k()
 {
-  //we go into Unlimited Length Packet Mode
-  writeReg(REG_PACKETCONFIG1, RF_PACKET1_FORMAT_FIXED | RF_PACKET1_DCFREE_OFF); // FORMAT=0
-  writeReg(REG_PAYLOADLENGTH, 0x00); // LENGTH=0
-  writeReg(REG_DATAMODUL, RF_DATAMODUL_DATAMODE_PACKET | RF_DATAMODUL_MODULATIONTYPE_OOK | RF_DATAMODUL_MODULATIONSHAPING_10); // FSK, packet mode, noise shaping
-  //TODO: adjust paRamp register for FSK mode (probably not needed in unlimited length mode)
+   // write bitrate dependent registers
+   writeReg(REG_BITRATEMSB, RF_BITRATEMSB_100000); // 100 kbps
+   writeReg(REG_BITRATELSB, RF_BITRATELSB_100000);
+   writeReg(REG_FDEVMSB, RF_FDEVMSB_100000); // 100KHz, (FDEV + BitRate / 2 <= 500KHz)
+   writeReg(REG_FDEVLSB, RF_FDEVLSB_100000);
+   //from table on page 26  (BitRate < 2 * RxBw)
+   writeReg(REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_16 | RF_RXBW_EXP_1); // 250k for FSK
 }
 
-void RFM69_stream::dataRate10k()
+void RFM69_stream::dataRate200k()
 {
-  // write bitrate dependent registers
-  writeReg(REG_BITRATEMSB, RF_BITRATEMSB_100000); // 100 kbps
-  writeReg(REG_BITRATELSB, RF_BITRATELSB_100000);
-  writeReg(REG_FDEVMSB, RF_FDEVMSB_100000); // 10KHz, (FDEV + BitRate / 2 <= 500KHz)
-  writeReg(REG_FDEVLSB, RF_FDEVLSB_100000);
-  writeReg(REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_16 | RF_RXBW_EXP_0); // (BitRate < 2 * RxBw)
+   // write bitrate dependent registers
+   writeReg(REG_BITRATEMSB, RF_BITRATEMSB_200000); // 200 kbps
+   writeReg(REG_BITRATELSB, RF_BITRATELSB_200000);
+   // From page 20: (FDEV + BitRate / 2 <= 500KHz)
+   writeReg(REG_FDEVMSB, RF_FDEVMSB_200000); // 200KHz
+   writeReg(REG_FDEVLSB, RF_FDEVLSB_200000);
+   //from table on page 26: (BitRate < 2 * RxBw)
+   writeReg(REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_16 | RF_RXBW_EXP_0); // 500k for FSK
 }
 
-//Works for TX, but not for RX for some reason
-bool RFM69_stream::returnToPacketMode()
+// This function looks to see if a packet was just received, if it has it
+// transfers the packet to the STREAMDATAx buffers so they can be accessed in
+// sequence via receiveStreamByte().
+void RFM69_stream::receiveStreamBuffer()
 {
-  //return register steeing back to defaults the were written in initilaize function
-  writeReg(REG_PACKETCONFIG1, RF_PACKET1_FORMAT_VARIABLE | RF_PACKET1_DCFREE_MANCHESTER | RF_PACKET1_CRC_ON | RF_PACKET1_CRCAUTOCLEAR_ON | RF_PACKET1_ADRSFILTERING_OFF);
-  writeReg(REG_PAYLOADLENGTH, 66); // in variable length mode: the max frame size, not used in TX
-  writeReg(REG_DATAMODUL, RF_DATAMODUL_DATAMODE_PACKET | RF_DATAMODUL_MODULATIONTYPE_OOK | RF_DATAMODUL_MODULATIONSHAPING_00); // no shaping
-  writeReg(REG_PACKETCONFIG2, RF_PACKET2_RXRESTARTDELAY_2BITS | RF_PACKET2_AUTORXRESTART_ON | RF_PACKET2_AES_OFF);
-  writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_01);
-
-  //clear FIFO
-  while(digitalRead(_interruptPin))
-  {
-	  readReg(REG_FIFO);
-  }
-
-  setHighPower(_isRFM69HW);
-  setMode(RF69_MODE_STANDBY);
-
-  unsigned long start = millis();
-  uint8_t timeout = 50;
-
-  start = millis();
-  while (((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00) && millis()-start < timeout); // wait for ModeReady
-  if (millis()-start >= timeout)
-    return false;
-
+   // If the active buffer is 1, we don't want to overwrite it, so we will
+   // copy to buffer 0
+   if(activeBuffer == 1) {
+      if(DATALEN >= RF69_MAX_DATA_LEN) {
+         for(int i = 0; i < RF69_MAX_DATA_LEN; i++) {
+           STREAMDATA0[i] = DATA[i];
+         }
+         DATALEN = 0;
+         DATALEN0 = 0;
+      }
+   } else {
+      if(DATALEN >= RF69_MAX_DATA_LEN) {
+         for(int i = 0; i < RF69_MAX_DATA_LEN; i++) {
+            STREAMDATA1[i] = DATA[i];
+         }
+         DATALEN = 0;
+         DATALEN1 = 0;
+      }
+   }
+   bufferCounter = 0;
 }
 
-
-void RFM69_stream::streamingModeRX()
+// This function checks to see if we are receieving a regualr stream of packets.
+// If we have missed 10 consecutive packets, we assume we are disconnected.
+// This functiona should only be called after a connection has been established.
+uint8_t RFM69_stream::isStreamConnected()
 {
-
-  detachInterrupt(_interruptNum); //we dont' want to do a normal receive
-
-  writeReg(REG_PACKETCONFIG1, RF_PACKET1_FORMAT_FIXED | RF_PACKET1_DCFREE_OFF); // FORMAT=0
-  writeReg(REG_PAYLOADLENGTH, 0x00); // LENGTH=0
-
-  if (readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY)
-	writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART); // avoid RX deadlocks
-  writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_10); // set DIO0 to "syncAddress" in receive mode
-  setMode(RF69_MODE_RX);
+   if(bufferCounter > RF69_MAX_DATA_LEN*10) {
+      return 0;
+   } else {
+      return 1;
+   }
 }
 
 uint8_t RFM69_stream::receiveStreamByte()
 {
-  return readReg(REG_FIFO);
+   uint8_t data;
+   if(bufferCounter++ < RF69_MAX_DATA_LEN) {
+      if(activeBuffer == 0) {
+         data = STREAMDATA0[DATALEN0] ^ CYPHER[DATALEN0 % (RF69_MAX_DATA_LEN/2)];
+         DATALEN0++;
+         if(DATALEN0 >= RF69_MAX_DATA_LEN) {
+            activeBuffer = 1;
+         }
+      } else {
+         data = STREAMDATA1[DATALEN1] ^ CYPHER[DATALEN1 % (RF69_MAX_DATA_LEN/2)];
+         DATALEN1++;
+         if(DATALEN1 >= RF69_MAX_DATA_LEN) {
+            activeBuffer = 0;
+         }
+      }
+      return data;
+   } else {
+      // We droped a packet
+      if(activeBuffer == 0) {
+         return STREAMDATA0[DATALEN0];
+      } else {
+         return STREAMDATA0[DATALEN1];
+      }
+   }
 }
 
-
-void RFM69_stream::stream(uint8_t toAddress, const void* buffer, uint8_t bufferSize)
-{
-  setMode(RF69_MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
-  while ((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00); // wait for ModeReady
-  writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_00); // DIO0 is "Packet Sent"
-  if (bufferSize > RF69_MAX_DATA_LEN) bufferSize = RF69_MAX_DATA_LEN;
-
-  // control byte
-  uint8_t CTLbyte = 0x00;
-
-  // write to FIFO
-  select();
-  SPI.transfer(REG_FIFO | 0x80);
-  SPI.transfer(bufferSize + 3);
-  SPI.transfer(toAddress);
-  SPI.transfer(_address);
-  SPI.transfer(CTLbyte);
-
-  for (uint8_t i = 0; i < bufferSize; i++)
-	SPI.transfer(((uint8_t*) buffer)[i]);
-  unselect();
-
-  // no need to wait for transmit mode to be ready since its handled by the radio
-  setMode(RF69_MODE_TX);
-
+// add byte to stream buffer
+void RFM69_stream::bufferStreamByte(uint8_t data) {
+   if(activeBuffer == 0) {
+      STREAMDATA0[DATALEN0] = data ^ CYPHER[DATALEN0 % (RF69_MAX_DATA_LEN/2)];
+      DATALEN0++;
+      if(DATALEN0 == RF69_MAX_DATA_LEN) {
+         activeBuffer = 1;
+      }
+   } else {
+      STREAMDATA1[DATALEN1] = data ^ CYPHER[DATALEN1 % (RF69_MAX_DATA_LEN/2)];
+      DATALEN1++;
+      if(DATALEN1 == RF69_MAX_DATA_LEN) {
+         activeBuffer = 0;
+      }
+   }
 }
 
-// internal function - interrupt gets called when fifo is not full for streaming mode
-void RFM69_stream::sendStreamByte(uint8_t data) {
-  if(digitalRead(_interruptPin) == 0 )
-  {
-	// fill another byte into fifo if the transmission is still running
-	select();
-	SPI.transfer(REG_FIFO | 0x80);
-	SPI.transfer(data);//write data into fifo
-	unselect();
-  }
+// Sends buffer to receiver when it is full.
+// reutns 0 when the transmission has gon one for too long
+uint8_t RFM69_stream::sendStreamBuffer(uint8_t toAddress) {
+   uint8_t streamData[RF69_MAX_DATA_LEN];
+
+   // If the active buffer beinf filled is 1, we should send buffer 0 because it
+   // should be full
+   if(activeBuffer == 1) {
+      if(DATALEN0 == RF69_MAX_DATA_LEN) {
+         for(int i = 0; i < RF69_MAX_DATA_LEN; i++) {
+           streamData[i] = STREAMDATA0[i];
+         }
+         send(toAddress, streamData, RF69_MAX_DATA_LEN);
+         totalSamplesSent++;
+         DATALEN0 = 0;
+      }
+   } else {
+      if(DATALEN1 == RF69_MAX_DATA_LEN) {
+         for(int i = 0; i < RF69_MAX_DATA_LEN; i++) {
+           streamData[i] = STREAMDATA1[i];
+         }
+         send(toAddress, streamData, RF69_MAX_DATA_LEN);
+         totalSamplesSent++;
+         DATALEN1 = 0;
+      }
+   }
+
+   // We limit the total transmission time to 40 seconds = 80us * 61bytes * 8192 packets
+   if(totalSamplesSent > 8192) {
+      return 0;
+   } else {
+      return 1;
+   }
 }
 
+void RFM69_stream::streamInit() {
+   activeBuffer = 0;
+   bufferCounter = 0;
+   totalSamplesSent = 0;
+   DATALEN0 = 0;
+   DATALEN1 = 0;
+}
+
+void RFM69_stream::setCypher(uint8_t *c) {
+   for(int i = 0; i < RF69_MAX_DATA_LEN/2; i++) {
+      CYPHER[i] = c[i];
+   }
+}
+
+void RFM69_stream::generateCypher(uint8_t *buf) {
+   for(int i = 0; i < RF69_MAX_DATA_LEN/2; i++) {
+      CYPHER[i] = random(255);
+      buf[i] = CYPHER[i];
+   }
+}
+
+// select the RFM69 transceiver (save SPI settings, set CS low)
+// This is overridden for RFM69 to make the SPI transactions faster
+void RFM69_stream::select() {
+  noInterrupts();
+#if defined (SPCR) && defined (SPSR)
+  // save current SPI settings
+  _SPCR = SPCR;
+  _SPSR = SPSR;
+#endif
+  // set RFM69 SPI settings
+  SPI.setDataMode(SPI_MODE0);
+  SPI.setBitOrder(MSBFIRST);
+  // IMPORTANT: This must be disabled to maximize SPI Speed
+  //SPI.setClockDivider(SPI_CLOCK_DIV4); // decided to slow down from DIV2 after SPI stalling in some instances, especially visible on mega1284p when RFM69 and FLASH chip both present
+  digitalWrite(_slaveSelectPin, LOW);
+}
